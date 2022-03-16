@@ -1,15 +1,35 @@
 #include "UnrealAny.h"
 #include "Misc/AutomationTest.h"
+#include "UnrealAnyFunctionLibrary.h"
+
+//static const FGuid AnyVerGUID(0xB7B84C63, 0x4AD98D40, 0x078FB9A3, 0x7E4E145F);
+//FCustomVersionRegistration GRegisterAnyCustomVersion(AnyVerGUID, FAny::VerType::LatestVersion, TEXT("AnyVer"));
+//
+//
+//bool FAny::Serialize(FArchive& Ar)
+//{
+//	Ar.UsingCustomVersion(AnyVerGUID);
+//	if (Ar.IsLoading()) {
+//		FName TempTypeName;
+//		Ar << TempTypeName;
+//
+//	}
+//	else if (Ar.IsSaving()) {
+//		FName TempTypeName = TypeFName();
+//		Ar << TempTypeName;
+//	}
+//	
+//	return true;
+//}
+
 
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FAnyTest, "Example.Any", EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
-
 
 bool FAnyTest::RunTest(const FString& Parameters)
 {
 	{
 		FAny Any = nullptr;
-		Any.Reset();
 		UTEST_EQUAL("Test Nullptr", Any.HasValue(), false);
 	}
 	{

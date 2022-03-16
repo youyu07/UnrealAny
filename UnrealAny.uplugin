@@ -19,6 +19,11 @@
 			"Name": "UnrealAny",
 			"Type": "Runtime",
 			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "UnrealAnyEditor",
+			"Type": "Editor",
+			"LoadingPhase": "Default"
 		}
 	]
 }

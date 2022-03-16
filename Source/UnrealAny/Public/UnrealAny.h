@@ -8,7 +8,7 @@
 
 
 USTRUCT(BlueprintType, meta=(HasNativeMake))
-struct FAny
+struct UNREALANY_API FAny
 {
     GENERATED_BODY()
 public:
@@ -58,16 +58,6 @@ public:
         return *this;
     }
 
-    void Reset() noexcept
-    {
-        delete Content; Content = nullptr;
-    }
-
-    void Swap(FAny& Other) noexcept
-    {
-        std::swap(Content, Other.Content);
-    }
-
     bool HasValue() const noexcept
     {
         return Content != nullptr;
@@ -78,9 +68,19 @@ public:
         return HasValue() ? Content->Type() : typeid(void);
     }
 
+    template<class ValueType>
+    bool IsA() const {
+        return Type() == typeid(ValueType);
+    }
+
     const FString TypeName() const noexcept
     {
         return FString(Type().name());
+    }
+
+    const FName TypeFName() const noexcept
+    {
+        return FName(Type().name());
     }
 
     template<class ValueType>
@@ -91,11 +91,28 @@ public:
         return *result;
     }
 
+    template<class ValueType>
+    inline ValueType CastUnchecked() const
+    {
+        const ValueType* result = &(static_cast<Holder<ValueType>*>(Content)->Held);
+        return *result;
+    }
+
 private:
+    void Reset() noexcept
+    {
+        if (Content) { delete Content; Content = nullptr;}
+    }
+
+    void Swap(FAny& Other) noexcept
+    {
+        std::swap(Content, Other.Content);
+    }
+
     class Placeholder
     {
     public:
-        virtual ~Placeholder(){}
+        virtual ~Placeholder() {}
         virtual const std::type_info& Type() const = 0;
         virtual Placeholder* Clone() const = 0;
     };
@@ -104,7 +121,7 @@ private:
     class Holder : public Placeholder
     {
     public:
-        Holder(ValueType const& Value) : Held(Value){}
+        Holder(const ValueType& Value) : Held(Value){}
 
         Holder(ValueType&& Value) : Held(std::move(Value)){}
 
@@ -122,4 +139,26 @@ private:
     };
 
     Placeholder* Content;
+
+
+    friend class UUnrealAnyFunctionLibrary;
+
+//public:
+//    enum VerType
+//    {
+//        LatestVersion,
+//    };
+//
+//    bool Serialize(FArchive& Ar);
 };
+
+
+//template<> struct TStructOpsTypeTraits<FAny> : public TStructOpsTypeTraitsBase2<FAny>
+//{
+//    enum
+//    {
+//        WithNoInitConstructor = true,
+//        WithZeroConstructor = true,
+//        WithSerializer = true,
+//    };
+//};
