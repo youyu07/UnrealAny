@@ -98,6 +98,9 @@ public:
         return *result;
     }
 
+    //所有受支持的类型都在其中定义
+    static const TMap<FName, uint32>& GetAnyTypes();
+
 private:
     void Reset() noexcept
     {
@@ -143,22 +146,22 @@ private:
 
     friend class UUnrealAnyFunctionLibrary;
 
-//public:
-//    enum VerType
-//    {
-//        LatestVersion,
-//    };
-//
-//    bool Serialize(FArchive& Ar);
+public:
+    enum EVersionType
+    {
+        LatestVersion,
+    };
+
+    bool Serialize(FArchive& Ar);
 };
 
 
-//template<> struct TStructOpsTypeTraits<FAny> : public TStructOpsTypeTraitsBase2<FAny>
-//{
-//    enum
-//    {
-//        WithNoInitConstructor = true,
-//        WithZeroConstructor = true,
-//        WithSerializer = true,
-//    };
-//};
+template<> struct TStructOpsTypeTraits<FAny> : public TStructOpsTypeTraitsBase2<FAny>
+{
+    enum
+    {
+        WithNoInitConstructor = true,
+        WithZeroConstructor = true,
+        WithSerializer = true,
+    };
+};
