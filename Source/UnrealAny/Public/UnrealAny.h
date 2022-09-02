@@ -1,4 +1,4 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+// Copyright Epic Games, Inc. All Rights Reserved.
 
 #pragma once
 
@@ -7,14 +7,15 @@
 #include "UnrealAny.generated.h"
 
 
-USTRUCT(BlueprintType, meta=(HasNativeMake))
+USTRUCT(BlueprintType)
 struct UNREALANY_API FAny
 {
-    GENERATED_BODY()
-public:
-    constexpr FAny() noexcept : Content(nullptr){}
+	GENERATED_BODY()
 
-    FAny(const FAny& Other) : Content(Other.Content ? Other.Content->Clone() : nullptr){}
+public:
+	constexpr FAny() noexcept {}
+
+    FAny(const FAny& Other) : Content(Other.Content ? Other.Content->Clone() : nullptr) {}
 
     FAny(FAny&& Other) noexcept : Content(std::move(Other.Content))
     {
@@ -22,15 +23,16 @@ public:
     }
 
     template<class ValueType>
-    FAny(const ValueType& Value) : Content(new Holder<ValueType>(Value)){}
+    FAny(const ValueType& Value) : Content(new Holder<ValueType>(Value)) {}
+
 
     template<class ValueType, class T = typename std::decay<ValueType>::type, typename std::enable_if<(!std::is_same<T, FAny>::value), int>::type = 0>
-    FAny(ValueType&& Value) noexcept : Content(new Holder<T>(std::forward<ValueType>(Value))){}
+    FAny(ValueType&& Value) noexcept : Content(new Holder<T>(std::forward<ValueType>(Value))) {}
 
-    ~FAny()
-    {
-        Reset();
-    }
+
+
+    ~FAny() { Reset(); }
+
 
     FAny& operator=(const FAny& Other)
     {
@@ -58,50 +60,45 @@ public:
         return *this;
     }
 
-    bool HasValue() const noexcept
+
+	bool IsValid() {
+		return Content != nullptr;
+	}
+
+    const std::type_info& TypeInfo() const noexcept
     {
-        return Content != nullptr;
+        return Content ? Content->Type() : typeid(void);
     }
 
-    const std::type_info& Type() const noexcept
+
+    template<class ValueType>
+    inline ValueType Get() const
     {
-        return HasValue() ? Content->Type() : typeid(void);
+        return *(&(static_cast<Holder<ValueType>*>(Content)->Held));
     }
 
     template<class ValueType>
-    bool IsA() const {
-        return Type() == typeid(ValueType);
+    inline void Set(const ValueType& Value)
+    {
+        Content = new Holder<ValueType>(Value);
     }
 
-    const FString TypeName() const noexcept
+    template<class ValueType, class T = typename std::decay<ValueType>::type, typename std::enable_if<(!std::is_same<T, FAny>::value), int>::type = 0>
+    inline void Set(ValueType&& Value)
     {
-        return FString(Type().name());
+        Content = new Holder<T>(std::forward<ValueType>(Value));
     }
 
-    const FName TypeFName() const noexcept
+public:
+    friend bool operator==(const FAny& A, const FAny& B)
     {
-        return FName(Type().name());
-    }
-
-    template<class ValueType>
-    inline ValueType Cast() const
-    {
-        check(Type() == typeid(ValueType));
-        const ValueType* result = &(static_cast<Holder<ValueType>*>(Content)->Held);
-        return *result;
-    }
-
-    template<class ValueType>
-    inline ValueType CastUnchecked() const
-    {
-        const ValueType* result = &(static_cast<Holder<ValueType>*>(Content)->Held);
-        return *result;
+        return A.Content == B.Content;
     }
 
 private:
     void Reset() noexcept
     {
-        if (Content) { delete Content; Content = nullptr;}
+        if (Content) { delete Content; Content = nullptr; }
     }
 
     void Swap(FAny& Other) noexcept
@@ -109,6 +106,7 @@ private:
         std::swap(Content, Other.Content);
     }
 
+private:
     class Placeholder
     {
     public:
@@ -121,9 +119,9 @@ private:
     class Holder : public Placeholder
     {
     public:
-        Holder(const ValueType& Value) : Held(Value){}
+        Holder(const ValueType& Value) : Held(Value) {}
 
-        Holder(ValueType&& Value) : Held(std::move(Value)){}
+        Holder(ValueType&& Value) : Held(std::move(Value)) {}
 
         virtual const std::type_info& Type() const override
         {
@@ -138,27 +136,30 @@ private:
         ValueType Held;
     };
 
-    Placeholder* Content;
+    Placeholder* Content = nullptr;
 
 
-    friend class UUnrealAnyFunctionLibrary;
+public:
+    bool Serialize(FArchive& Ar);
+    //bool Serialize(FStructuredArchive::FSlot& Slot) { return Serialize(Slot.GetUnderlyingArchive()); }
+    bool NetSerialize(FArchive& Ar, UPackageMap* Map, bool& bOutSuccess);
 
-//public:
-//    enum VerType
-//    {
-//        LatestVersion,
-//    };
-//
-//    bool Serialize(FArchive& Ar);
+    friend CORE_API FArchive& operator<<(FArchive& Ar, FAny& Any)
+    {
+        return Ar << Any;
+    }
 };
 
 
-//template<> struct TStructOpsTypeTraits<FAny> : public TStructOpsTypeTraitsBase2<FAny>
-//{
-//    enum
-//    {
-//        WithNoInitConstructor = true,
-//        WithZeroConstructor = true,
-//        WithSerializer = true,
-//    };
-//};
+template<> struct TStructOpsTypeTraits<FAny> : public TStructOpsTypeTraitsBase2<FAny>
+{
+    enum
+    {
+        WithIdenticalViaEquality = true,
+        WithNoInitConstructor = true,
+        WithZeroConstructor = true,
+        WithNetSerializer = true,
+        //WithStructuredSerializer = true,
+        WithSerializer = true,
+    };
+};

@@ -1,50 +1,89 @@
+// Copyright Epic Games, Inc. All Rights Reserved.
+
 #include "UnrealAny.h"
-#include "Misc/AutomationTest.h"
-#include "UnrealAnyFunctionLibrary.h"
 
-//static const FGuid AnyVerGUID(0xB7B84C63, 0x4AD98D40, 0x078FB9A3, 0x7E4E145F);
-//FCustomVersionRegistration GRegisterAnyCustomVersion(AnyVerGUID, FAny::VerType::LatestVersion, TEXT("AnyVer"));
-//
-//
-//bool FAny::Serialize(FArchive& Ar)
-//{
-//	Ar.UsingCustomVersion(AnyVerGUID);
-//	if (Ar.IsLoading()) {
-//		FName TempTypeName;
-//		Ar << TempTypeName;
-//
-//	}
-//	else if (Ar.IsSaving()) {
-//		FName TempTypeName = TypeFName();
-//		Ar << TempTypeName;
-//	}
-//	
-//	return true;
-//}
-
-
-
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FAnyTest, "Example.Any", EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
-
-bool FAnyTest::RunTest(const FString& Parameters)
+namespace Any
 {
+	template<typename T>
+	static void Loading(FAny& Any, FArchive& Ar)
 	{
-		FAny Any = nullptr;
-		UTEST_EQUAL("Test Nullptr", Any.HasValue(), false);
+		T Value = T(); Ar << Value; Any.Set(Value);
 	}
+	template<typename T>
+	static void Saving(const FAny& Any, FArchive& Ar)
 	{
-		auto Any = FAny(FVector::ZeroVector);
-		UTEST_EQUAL("Test Cast Vector", Any.Cast<FVector>(), FVector::ZeroVector);
+		auto Value = Any.Get<T>();
+		Ar << Value;
 	}
-	{
-		FAny Any = FRotator::ZeroRotator;
-		UTEST_EQUAL("Test Cast Rotator", Any.Cast<FRotator>(), FRotator::ZeroRotator);
+}
+
+#define ADD_TYPE(Type, NameEnum)  \
+{ \
+	FName TypeName = typeid(Type).name(); \
+	TypeMap.Add(TypeName, MakeTuple(NameEnum, Any::Loading<Type>, Any::Saving<Type>)); \
+	TypeNameMap.Add(NameEnum, TypeName); \
+}
+
+
+static TMap<FName, TTuple<EName, TFunction<void(FAny&, FArchive&)>, TFunction<void(const FAny&, FArchive&)>>> TypeMap;
+static TMap<EName, FName> TypeNameMap;
+static void InitializeTypeInfo()
+{
+	static bool IsInit = false;
+	if (!IsInit) {
+		IsInit = true;
+		ADD_TYPE(bool, NAME_BoolProperty)
+		ADD_TYPE(BYTE, NAME_ByteProperty)
+		ADD_TYPE(int32, NAME_Int32Property)
+		ADD_TYPE(int64, NAME_Int64Property)
+		ADD_TYPE(float, NAME_FloatProperty)
+		ADD_TYPE(double, NAME_DoubleProperty)
+		ADD_TYPE(FString, NAME_StrProperty)
+		ADD_TYPE(FName, NAME_NameProperty)
+		ADD_TYPE(FText, NAME_TextProperty)
+		ADD_TYPE(UClass*, NAME_Class)
+		ADD_TYPE(UObject*, NAME_Object)
+		ADD_TYPE(FVector, NAME_Vector)
+		ADD_TYPE(FRotator, NAME_Rotator)
+		ADD_TYPE(FTransform, NAME_Transform)
+		ADD_TYPE(FVector2D, NAME_Vector2D)
+		ADD_TYPE(FQuat, NAME_Quat)
 	}
-	{
-		FAny Any = 0;
-		UTEST_EQUAL("Test Any Type Name", Any.TypeName(), FString("int"));
-		UTEST_EQUAL("Test Any Type Info", Any.Type(), typeid(int32));
+}
+#undef ADD_TYPE
+
+
+bool FAny::Serialize(FArchive& Ar)
+{
+	InitializeTypeInfo();
+
+	if (Ar.IsSaving()) {
+		if (auto Ptr = TypeMap.Find(TypeInfo().name())) {
+			EName Type = Ptr->Get<0>();
+			Ar << Type;
+			Ptr->Get<2>()(*this, Ar);
+		}
+		else {
+			Ar << NAME_None;
+		}
+	}
+
+
+	if (Ar.IsLoading()) {
+		EName Type = NAME_None;
+		Ar << Type;
+		if (auto NamePtr = TypeNameMap.Find(Type)) {
+			auto Info = TypeMap[*NamePtr];
+			Info.Get<1>()(*this, Ar);
+		}
 	}
 
 	return true;
+}
+
+bool FAny::NetSerialize(FArchive& Ar, UPackageMap* Map, bool& bOutSuccess)
+{
+	
+
+	return false;
 }

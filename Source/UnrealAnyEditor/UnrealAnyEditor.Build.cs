@@ -41,6 +41,7 @@ public class UnrealAnyEditor : ModuleRules
 				"BlueprintGraph",
 				"KismetCompiler",
 				"GraphEditor",
+				"Documentation",
 				"UnrealAny"
 			}
 			);
