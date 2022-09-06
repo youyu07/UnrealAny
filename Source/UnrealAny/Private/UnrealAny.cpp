@@ -7,7 +7,7 @@ namespace Any
 	template<typename T>
 	static void Loading(FAny& Any, FArchive& Ar)
 	{
-		T Value = T(); Ar << Value; Any.Set(Value);
+		T Value = T(); Ar << Value; Any = Value;
 	}
 	template<typename T>
 	static void Saving(const FAny& Any, FArchive& Ar)
@@ -33,7 +33,6 @@ static void InitializeTypeInfo()
 	if (!IsInit) {
 		IsInit = true;
 		ADD_TYPE(bool, NAME_BoolProperty)
-		ADD_TYPE(BYTE, NAME_ByteProperty)
 		ADD_TYPE(int32, NAME_Int32Property)
 		ADD_TYPE(int64, NAME_Int64Property)
 		ADD_TYPE(float, NAME_FloatProperty)
@@ -41,13 +40,9 @@ static void InitializeTypeInfo()
 		ADD_TYPE(FString, NAME_StrProperty)
 		ADD_TYPE(FName, NAME_NameProperty)
 		ADD_TYPE(FText, NAME_TextProperty)
-		ADD_TYPE(UClass*, NAME_Class)
-		ADD_TYPE(UObject*, NAME_Object)
 		ADD_TYPE(FVector, NAME_Vector)
 		ADD_TYPE(FRotator, NAME_Rotator)
 		ADD_TYPE(FTransform, NAME_Transform)
-		ADD_TYPE(FVector2D, NAME_Vector2D)
-		ADD_TYPE(FQuat, NAME_Quat)
 	}
 }
 #undef ADD_TYPE
@@ -57,22 +52,24 @@ bool FAny::Serialize(FArchive& Ar)
 {
 	InitializeTypeInfo();
 
+	Ar << TypeName;
+
 	if (Ar.IsSaving()) {
 		if (auto Ptr = TypeMap.Find(TypeInfo().name())) {
-			EName Type = Ptr->Get<0>();
-			Ar << Type;
+			/*EName Type = Ptr->Get<0>();
+			Ar << Type;*/
 			Ptr->Get<2>()(*this, Ar);
 		}
-		else {
+		/*else {
 			Ar << NAME_None;
-		}
+		}*/
 	}
 
 
 	if (Ar.IsLoading()) {
-		EName Type = NAME_None;
-		Ar << Type;
-		if (auto NamePtr = TypeNameMap.Find(Type)) {
+		/*EName Type = NAME_None;
+		Ar << Type;*/
+		if (auto NamePtr = TypeNameMap.Find(TypeName)) {
 			auto Info = TypeMap[*NamePtr];
 			Info.Get<1>()(*this, Ar);
 		}

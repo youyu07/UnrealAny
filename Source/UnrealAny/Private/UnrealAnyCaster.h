@@ -8,7 +8,7 @@
 #include "UnrealAnyCaster.generated.h"
 
 
-UCLASS()
+UCLASS(abstract)
 class UAnyPropertyBase : public UObject
 {
 	GENERATED_BODY()
@@ -21,19 +21,9 @@ public:
 		return FAny();
 	}
 
-	virtual FAny ToAnyArray(FArrayProperty* Property, uint8* ValueAddress)
-	{
-		return FAny();
-	}
-
 	virtual void WriteProperty(const FAny& Any, FProperty* Property, uint8*& ValueAddress)
 	{
 	
-	}
-
-	virtual void WriteArrayProperty(const FAny& Any, FArrayProperty* Property, uint8*& ValueAddress)
-	{
-
 	}
 
 	virtual EClassCastFlags GetClassCastFlags() const
@@ -43,12 +33,9 @@ public:
 };
 
 
-
 #define DEFINE_ANYCAS(PropertyType) \
 	virtual FAny ToAny(FProperty* Property, uint8* ValueAddress) override; \
-	virtual FAny ToAnyArray(FArrayProperty* Property, uint8* ValueAddress) override; \
 	virtual void WriteProperty(const FAny& Any, FProperty* Property, uint8*& ValueAddress) override; \
-	virtual void WriteArrayProperty(const FAny& Any, FArrayProperty* Property, uint8*& ValueAddress) override; \
 	virtual EClassCastFlags GetClassCastFlags() const override \
 	{ \
 		return EClassCastFlags(PropertyType::StaticClassCastFlags()); \
@@ -122,13 +109,13 @@ class UAnyCasterClass : public UAnyPropertyBase
 };
 
 
-UCLASS()
-class UAnyCasterObject : public UAnyPropertyBase
-{
-	GENERATED_BODY()
-
-	DEFINE_ANYCAS(FObjectProperty)
-};
+//UCLASS()
+//class UAnyCasterObject : public UAnyPropertyBase
+//{
+//	GENERATED_BODY()
+//
+//	DEFINE_ANYCAS(FObjectProperty)
+//};
 
 UCLASS()
 class UAnyCasterStruct : public UAnyPropertyBase
@@ -169,17 +156,7 @@ public:
 		return FAny();
 	}
 
-	virtual FAny ToAnyArray(FArrayProperty* Property, uint8* ValueAddress)
-	{
-		return FAny();
-	}
-
 	virtual void WriteProperty(const FAny& Any, FStructProperty* Property, uint8*& ValueAddress)
-	{
-
-	}
-
-	virtual void WriteArrayProperty(const FAny& Any, FArrayProperty* Property, uint8*& ValueAddress)
 	{
 
 	}
@@ -191,9 +168,7 @@ public:
 
 #define DEFINE_ANYCAS_STRUCT(StructType, StructTypeName) \
 	virtual FAny ToAny(FStructProperty* Property, uint8* ValueAddress) override; \
-	virtual FAny ToAnyArray(FArrayProperty* Property, uint8* ValueAddress) override; \
 	virtual void WriteProperty(const FAny& Any, FStructProperty* Property, uint8*& ValueAddress) override; \
-	virtual void WriteArrayProperty(const FAny& Any, FArrayProperty* Property, uint8*& ValueAddress) override; \
 	virtual FName GetStructName() const override { \
 		return StructTypeName; \
 	}
@@ -223,28 +198,4 @@ class UAnyCasterTransform : public UAnyStructBase
 	GENERATED_BODY()
 
 	DEFINE_ANYCAS_STRUCT(FTransform, NAME_Transform)
-};
-
-UCLASS()
-class UAnyCasterVector2D : public UAnyStructBase
-{
-	GENERATED_BODY()
-
-	DEFINE_ANYCAS_STRUCT(FVector2D, NAME_Vector2D)
-};
-
-
-UCLASS()
-class UAnyCasterArray : public UAnyPropertyBase
-{
-	GENERATED_BODY()
-
-public:
-	virtual FAny ToAny(FProperty* Property, uint8* ValueAddress) override;
-	virtual void WriteProperty(const FAny& Any, FProperty* Property, uint8*& ValueAddress) override;
-
-	virtual EClassCastFlags GetClassCastFlags() const
-	{
-		return EClassCastFlags(FArrayProperty::StaticClassCastFlags());
-	}
 };

@@ -6,27 +6,13 @@
 #include "Slate.h"
 #include <type_traits>
 
+
+#include "SPinTypeSelector.h"
+#include "EdGraphSchema_K2.h"
+
+
 #define LOCTEXT_NAMESPACE "UnrealAnyCustomization"
 
-template<typename T>
-static void OnActionSetType(TSharedRef<IPropertyHandle> Handle, TArray<FAny*> Anys, TSharedPtr<IPropertyUtilities> Utilities)
-{
-	Handle->NotifyPreChange();
-	for (auto& it : Anys)
-	{
-		it->Set(T());
-	}
-	Handle->NotifyPostChange(EPropertyChangeType::ValueSet);
-	Utilities->ForceRefresh();
-}
-
-
-template<typename T>
-static FUIAction CreateMenuAction(TSharedRef<IPropertyHandle> Handle, TArray<FAny*> Anys, TSharedPtr<IPropertyUtilities> Utilities)
-{
-	return FUIAction(
-		FExecuteAction::CreateStatic(&OnActionSetType<T>, Handle, Anys, Utilities));
-}
 
 template<typename T>
 class SAnyWidget : public SCompoundWidget
@@ -57,7 +43,7 @@ private:
 		Handle->NotifyPreChange();
 		for (auto& it : Anys)
 		{
-			it->Set(Value);
+			*it = Value;
 		}
 		Handle->NotifyPostChange(EPropertyChangeType::ValueSet);
 	}
@@ -81,35 +67,155 @@ TSharedRef<SWidget> CreateAnyWidget(TSharedRef<IPropertyHandle> PropertyHandle, 
 		return SNew(SAnyWidget<T>, PropertyHandle, Anys);
 }
 
-static TFunction<TSharedRef<SWidget>(TSharedRef<IPropertyHandle>, const TArray<FAny*>&)> GetCreateAnyWidgetFunction(const FName& TypeName)
+static TFunction<TSharedRef<SWidget>(TSharedRef<IPropertyHandle>, const TArray<FAny*>&)> GetCreateAnyWidgetFunction(const EName& TypeName)
 {
-	static TMap<FName, TFunction<TSharedRef<SWidget>(TSharedRef<IPropertyHandle>, const TArray<FAny*>&)>> Map;
+	static TMap<EName, TFunction<TSharedRef<SWidget>(TSharedRef<IPropertyHandle>, const TArray<FAny*>&)>> Map;
 	bool bIsInitialized = false;
 	if (!bIsInitialized) {
-		Map.Add(FName(typeid(void).name()), CreateAnyWidget<void>);
-		Map.Add(FName(typeid(bool).name()), CreateAnyWidget<bool>);
-		Map.Add(FName(typeid(int32).name()), CreateAnyWidget<int32>);
-		Map.Add(FName(typeid(int64).name()), CreateAnyWidget<int64>);
-		Map.Add(FName(typeid(float).name()), CreateAnyWidget<float>);
-		Map.Add(FName(typeid(double).name()), CreateAnyWidget<double>);
+		Map.Add(NAME_None, CreateAnyWidget<void>);
+		Map.Add(NAME_BoolProperty, CreateAnyWidget<bool>);
+		Map.Add(NAME_Int32Property, CreateAnyWidget<int32>);
+		Map.Add(NAME_Int64Property, CreateAnyWidget<int64>);
+		Map.Add(NAME_FloatProperty, CreateAnyWidget<float>);
+		Map.Add(NAME_Double, CreateAnyWidget<double>);
 
-		Map.Add(FName(typeid(FVector).name()), CreateAnyWidget<FVector>);
+		Map.Add(NAME_Vector, CreateAnyWidget<FVector>);
 	}
 
 	if (Map.Contains(TypeName)) {
 		return Map[TypeName];
 	}
-	return Map["void"];
+	return Map[NAME_None];
 }
-
-
-#define ADD_MENU(Type, TypeStr) HeaderRow.AddCustomContextMenuAction(CreateMenuAction<Type>(InStructPropertyHandle, Anys, Utilities), LOCTEXT(#TypeStr##"TypeKey", #TypeStr))
 
 
 TSharedRef<IPropertyTypeCustomization> FUnrealAnyCustomization::MakeInstance()
 {
 	return MakeShareable(new FUnrealAnyCustomization);
 }
+
+
+#define DEFINE_PINTYPE(Category, SubCategory, SubObject) FEdGraphPinType(Category, SubCategory, SubObject, EPinContainerType::None, false, FEdGraphTerminalType())
+
+static FEdGraphPinType OnGetPinInfo(TArray<FAny*> Anys, bool MultiType)
+{
+	if (!MultiType) {
+		auto Type = Anys[0]->Type();
+		switch (Type)
+		{
+		case NAME_BoolProperty: return DEFINE_PINTYPE(UEdGraphSchema_K2::PC_Boolean, NAME_None, nullptr);
+		case NAME_ByteProperty: return DEFINE_PINTYPE(UEdGraphSchema_K2::PC_Byte, NAME_None, nullptr);
+		case NAME_Int32Property: return DEFINE_PINTYPE(UEdGraphSchema_K2::PC_Int, NAME_None, nullptr);
+		case NAME_Int64Property: return DEFINE_PINTYPE(UEdGraphSchema_K2::PC_Int64, NAME_None, nullptr);
+		case NAME_FloatProperty: return DEFINE_PINTYPE(UEdGraphSchema_K2::PC_Real, UEdGraphSchema_K2::PC_Float, nullptr);
+		case NAME_DoubleProperty: return DEFINE_PINTYPE(UEdGraphSchema_K2::PC_Real, UEdGraphSchema_K2::PC_Double, nullptr);
+		case NAME_StrProperty: return DEFINE_PINTYPE(UEdGraphSchema_K2::PC_String, NAME_None, nullptr);
+		case NAME_NameProperty: return DEFINE_PINTYPE(UEdGraphSchema_K2::PC_Name, NAME_None, nullptr);
+		case NAME_TextProperty: return DEFINE_PINTYPE(UEdGraphSchema_K2::PC_Text, NAME_None, nullptr);
+
+		case NAME_Vector: return DEFINE_PINTYPE(UEdGraphSchema_K2::PC_Struct, NAME_None, TBaseStructure<FVector>::Get());
+		case NAME_Rotator: return DEFINE_PINTYPE(UEdGraphSchema_K2::PC_Struct, NAME_None, TBaseStructure<FRotator>::Get());
+		case NAME_Transform: return DEFINE_PINTYPE(UEdGraphSchema_K2::PC_Struct, NAME_None, TBaseStructure<FTransform>::Get());
+
+		case NAME_StructProperty: return DEFINE_PINTYPE(UEdGraphSchema_K2::PC_Struct, NAME_None, Anys[0]->Get<FAny::FAnyStruct>().Struct.Get());
+		case NAME_EnumProperty: return DEFINE_PINTYPE(UEdGraphSchema_K2::PC_Enum, NAME_None, Anys[0]->Get<FAny::FAnyEnum>().Enum.Get());
+		case NAME_ObjectProperty: return DEFINE_PINTYPE(UEdGraphSchema_K2::PC_Object, NAME_None, Anys[0]->Get<FAny::FAnyObject>().Class.Get());
+		}
+	}
+
+	return FEdGraphPinType();
+}
+
+template<typename T>
+static void InitAnyBasic(const FEdGraphPinType& PinType, const TArray<FAny*>& Anys)
+{
+	for (auto& Any : Anys)
+	{
+		*Any = T();
+	}
+}
+
+static void InitAnyReal(const FEdGraphPinType& PinType, const TArray<FAny*>& Anys)
+{
+	for (auto& Any : Anys)
+	{
+		if (PinType.PinSubCategory == UEdGraphSchema_K2::PC_Float) {
+			*Any = 0.0f;
+		}
+		else if (PinType.PinSubCategory == UEdGraphSchema_K2::PC_Double) {
+			*Any = 0.0;
+		}
+	}
+}
+
+static void InitAnyStruct(const FEdGraphPinType& PinType, const TArray<FAny*>& Anys)
+{
+	if (auto EName = PinType.PinSubCategoryObject->GetFName().ToEName()) {
+		switch (*EName)
+		{
+		case NAME_Vector: InitAnyBasic<FVector>(PinType, Anys); return;
+		case NAME_Rotator: InitAnyBasic<FRotator>(PinType, Anys); return;
+		case NAME_Transform: InitAnyBasic<FTransform>(PinType, Anys); return;
+		case NAME_IntPoint: InitAnyBasic<FIntPoint>(PinType, Anys); return;
+		}
+	}
+
+	FAny::FAnyStruct AnyStruct{ Cast<UScriptStruct>(PinType.PinSubCategoryObject) };
+	AnyStruct.Value.SetNumZeroed(AnyStruct.Struct->GetStructureSize());
+	for (auto& Any : Anys)
+	{
+		*Any = AnyStruct;
+	}
+}
+
+static void InitAnyEnum(const FEdGraphPinType& PinType, const TArray<FAny*>& Anys)
+{
+	FAny::FAnyEnum AnyEnum{ Cast<UEnum>(PinType.PinSubCategoryObject) };
+	for (auto& Any : Anys)
+	{
+		*Any = AnyEnum;
+	}
+}
+
+static void InitAnyObject(const FEdGraphPinType& PinType, const TArray<FAny*>& Anys)
+{
+	FAny::FAnyObject AnyObject{ Cast<UClass>(PinType.PinSubCategoryObject) };
+	for (auto& Any : Anys)
+	{
+		*Any = AnyObject;
+	}
+}
+
+static void PinInfoChanged(const FEdGraphPinType& PinType, TArray<FAny*> Anys, TSharedRef<IPropertyHandle> Handle, TSharedPtr<IPropertyUtilities> Utilities)
+{
+	static TMap<FName, TFunction<void(const FEdGraphPinType& PinType, const TArray<FAny*>&)>> InitMap;
+	static bool IsInitialized = false;
+	if (!IsInitialized) {
+		IsInitialized = true;
+		InitMap.Add(UEdGraphSchema_K2::PC_Boolean, InitAnyBasic<bool>);
+		InitMap.Add(UEdGraphSchema_K2::PC_Byte, InitAnyBasic<BYTE>);
+		InitMap.Add(UEdGraphSchema_K2::PC_Int, InitAnyBasic<int32>);
+		InitMap.Add(UEdGraphSchema_K2::PC_Int64, InitAnyBasic<int64>);
+		InitMap.Add(UEdGraphSchema_K2::PC_Real, InitAnyReal);
+		InitMap.Add(UEdGraphSchema_K2::PC_String, InitAnyBasic<FString>);
+		InitMap.Add(UEdGraphSchema_K2::PC_Name, InitAnyBasic<FName>);
+		InitMap.Add(UEdGraphSchema_K2::PC_Text, InitAnyBasic<FText>);
+
+		InitMap.Add(UEdGraphSchema_K2::PC_Struct, InitAnyStruct);
+		InitMap.Add(UEdGraphSchema_K2::PC_Enum, InitAnyEnum);
+		InitMap.Add(UEdGraphSchema_K2::PC_Object, InitAnyObject);
+	}
+
+	Handle->NotifyPreChange();
+
+	if (auto it = InitMap.Find(PinType.PinCategory)) {
+		(*it)(PinType, Anys);
+	}
+
+	Handle->NotifyPostChange(EPropertyChangeType::ValueSet);
+	Utilities->ForceRefresh();
+}
+
 
 void FUnrealAnyCustomization::CustomizeHeader(TSharedRef<IPropertyHandle> InStructPropertyHandle, FDetailWidgetRow& HeaderRow, IPropertyTypeCustomizationUtils& StructCustomizationUtils)
 {
@@ -134,40 +240,37 @@ void FUnrealAnyCustomization::CustomizeHeader(TSharedRef<IPropertyHandle> InStru
 		TempUtilities->ForceRefresh();
 	}, InStructPropertyHandle, Anys, Utilities));
 
+	TSet<EName> Types;
+	for (auto& it : Anys)
+	{
+		Types.Add(it->Type());
+	}
 
 	if (Anys.Num() > 0) {
 		
-		ADD_MENU(bool, Bool);
-		ADD_MENU(BYTE, Byte);
-		ADD_MENU(int32, Int32);
-		ADD_MENU(int64, Int64);
-		ADD_MENU(float, Float);
-		ADD_MENU(double, Double);
-		ADD_MENU(FString, String);
-		ADD_MENU(FName, Name);
-		ADD_MENU(FText, Text);
-		ADD_MENU(UClass*, Class);
-		ADD_MENU(UObject*, Object);
-		ADD_MENU(FVector, Vector);
-		ADD_MENU(FRotator, Rotator);
-		ADD_MENU(FTransform, Transform);
-		ADD_MENU(FVector2D, Vector2D);
-		ADD_MENU(FQuat, Quat);
+		auto Schema = GetDefault<UEdGraphSchema_K2>();
+		auto TypeSelector = SNew(SPinTypeSelector, FGetPinTypeTree::CreateUObject(Schema, &UEdGraphSchema_K2::GetVariableTypeTree))
+			.TargetPinType_Static(OnGetPinInfo, Anys, Types.Num() > 1)
+			.OnPinTypeChanged_Static(PinInfoChanged, Anys, InStructPropertyHandle, Utilities)
+			.SelectorType(SPinTypeSelector::ESelectorType::Partial)
+			.Schema(Schema);
 
-		HeaderRow.NameContent()[InStructPropertyHandle->CreatePropertyNameWidget()];
-
-		bool MultiTyps = false;
-
-		TSet<FName> Types;
-		for (auto& it : Anys)
-		{
-			Types.Add(it->TypeInfo().name());
-		}
+		HeaderRow.NameContent().HAlign(HAlign_Fill)[
+			SNew(SHorizontalBox) + SHorizontalBox::Slot()[
+				InStructPropertyHandle->CreatePropertyNameWidget()
+			] + SHorizontalBox::Slot().HAlign(HAlign_Right)[
+				TypeSelector
+			]
+		];
 
 		if (Types.Num() == 1) {
 			auto Type = *Types.begin();
 			auto Widget = GetCreateAnyWidgetFunction(Type)(InStructPropertyHandle, Anys);
 			HeaderRow.ValueContent().HAlign(HAlign_Fill)[Widget];
+
+			if (Type == NAME_StructProperty) {
+				InStructPropertyHandle->AddChildStructure(MakeShareable(new FStructOnScope(Anys[0]->Get<FAny::FAnyStruct>().Struct.Get())));
+			}
 		}
 	}
 }
@@ -175,7 +278,38 @@ void FUnrealAnyCustomization::CustomizeHeader(TSharedRef<IPropertyHandle> InStru
 
 void FUnrealAnyCustomization::CustomizeChildren(TSharedRef<IPropertyHandle> InStructPropertyHandle, IDetailChildrenBuilder& ChildBuilder, IPropertyTypeCustomizationUtils& StructCustomizationUtils)
 {
-	
+	TArray<FAny*> Anys;
+	InStructPropertyHandle->EnumerateRawData([&](void* RawData, const int32 /*DataIndex*/, const int32 /*NumDatas*/) -> bool {
+		Anys.Add(reinterpret_cast<FAny*>(RawData));
+		return true;
+	});
+
+	TSet<EName> Types;
+	for (auto& it : Anys)
+	{
+		Types.Add(it->Type());
+	}
+
+	if (Types.Num() == 1 && (*Types.begin()) == NAME_StructProperty) {
+		TSharedPtr<FStructOnScope> Scope = MakeShareable(new FStructOnScope(Anys[0]->Get<FAny::FAnyStruct>().Struct.Get()));
+		auto Name = Scope->GetStruct()->GetFName();
+		ChildBuilder.AddExternalStructureProperty(Scope.ToSharedRef(), NAME_None, FAddPropertyParams().AllowChildren(false))->DisplayName(FText::FromName(Name));
+	}
+
+	/*uint32 SelfChildNumber = 0;
+	InStructPropertyHandle->GetNumChildren(SelfChildNumber);
+
+	if (SelfChildNumber > 0) {
+		if (auto Self = InStructPropertyHandle->GetChildHandle(0)) {
+			uint32 ChildNumber = 0;
+			Self->GetNumChildren(ChildNumber);
+
+			for (uint32 i = 0; i < ChildNumber; i++)
+			{
+				ChildBuilder.AddProperty(Self->GetChildHandle(i).ToSharedRef());
+			}
+		}
+	}*/
 }
 
 
@@ -203,7 +337,7 @@ private:
 		Handle->NotifyPreChange();
 		for (auto& it : Anys)
 		{
-			it->Set(Value == ECheckBoxState::Checked);
+			*it = Value == ECheckBoxState::Checked;
 		}
 		Handle->NotifyPostChange(EPropertyChangeType::ValueSet);
 	}
@@ -232,26 +366,52 @@ public:
 		Handle = PropertyHandle;
 		Anys = InAnys;
 		ChildSlot[
-			SNew(SVectorInputBox).AllowSpin(true)
-				.Vector(this, &SAnyWidget<FVector>::TempOnGetValue)
-				.OnVectorCommitted(this, &SAnyWidget<FVector>::TempOnValueChanged)
+			SNew(SNumericVectorInputBox<double>).AllowSpin(true)
+				.bColorAxisLabels(true)
+				.X(this, &SAnyWidget<FVector>::TempOnGetValue, EAxis::X)
+				.Y(this, &SAnyWidget<FVector>::TempOnGetValue, EAxis::Y)
+				.Z(this, &SAnyWidget<FVector>::TempOnGetValue, EAxis::Z)
+				.OnXChanged(this, &SAnyWidget<FVector>::TempOnValueChanged, EAxis::X)
+				.OnYChanged(this, &SAnyWidget<FVector>::TempOnValueChanged, EAxis::Y)
+				.OnZChanged(this, &SAnyWidget<FVector>::TempOnValueChanged, EAxis::Z)
+				.OnXCommitted(this, &SAnyWidget<FVector>::TempOnValueCommit, EAxis::X)
+				.OnYCommitted(this, &SAnyWidget<FVector>::TempOnValueCommit, EAxis::Y)
+				.OnZCommitted(this, &SAnyWidget<FVector>::TempOnValueCommit, EAxis::Z)
 		];
 	}
 
 private:
-	void TempOnValueChanged(FVector3f Value, ETextCommit::Type CommitType)
+	void TempOnValueChanged(double AxisValue, EAxis::Type Axis)
 	{
 		Handle->NotifyPreChange();
 		for (auto& it : Anys)
 		{
-			it->Set(FVector(Value));
+			auto Vector = it->Get<FVector>();
+			Vector.SetComponentForAxis(Axis, AxisValue);
+			*it = Vector;
 		}
 		Handle->NotifyPostChange(EPropertyChangeType::ValueSet);
 	}
 
-	TOptional<FVector3f> TempOnGetValue() const
+	void TempOnValueCommit(double AxisValue, ETextCommit::Type CommitType, EAxis::Type Axis)
 	{
-		return FVector3f(Anys[0]->Get<FVector>());
+		TempOnValueChanged(AxisValue, Axis);
+	}
+
+	TOptional<double> TempOnGetValue(EAxis::Type Axis) const
+	{
+		TSet<double> Set;
+		for (auto& it : Anys)
+		{
+			Set.Add(it->Get<FVector>().GetComponentForAxis(Axis));
+		}
+
+		if (Set.Num() > 1) {
+			return TOptional<double>();
+		}
+		else {
+			return *Set.begin();
+		}
 	}
 
 private:

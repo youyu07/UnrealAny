@@ -6,10 +6,10 @@ public class UnrealAny : ModuleRules
 {
 	public UnrealAny(ReadOnlyTargetRules Target) : base(Target)
 	{
-		PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
-		bUseRTTI = true;
+        CppStandard = CppStandardVersion.Cpp20;
+        bUseUnity = false;
 
-		PublicDependencyModuleNames.AddRange(
+        PublicDependencyModuleNames.AddRange(
 			new string[]
 			{
 				"Core",
@@ -28,5 +28,10 @@ public class UnrealAny : ModuleRules
 				// ... add private dependencies that you statically link with here ...	
 			}
 			);
-	}
+
+		if (Target.bBuildEditor)
+		{
+			PrivateDependencyModuleNames.Add("BlueprintGraph");
+        }
+    }
 }
