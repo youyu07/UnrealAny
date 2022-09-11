@@ -6,14 +6,9 @@
 #include "UObject/NoExportTypes.h"
 #include "Serialization/MemoryWriter.h"
 #include "Serialization/MemoryReader.h"
+#include "UnrealAnyReflection.h"
 #include "UnrealAny.generated.h"
 
-
-struct CProvidesStaticEnum
-{
-    template<typename T>
-    auto Requires(const T&) -> decltype(StaticEnum<T>());
-};
 
 
 USTRUCT(BlueprintType)
@@ -40,6 +35,11 @@ public:
         TWeakObjectPtr<UObject> Object = nullptr;
     };
 
+    struct FAnyClass
+    {
+        TWeakObjectPtr<UClass> BaseClass = nullptr;
+        TWeakObjectPtr<UClass> Class = nullptr;
+    };
 
 public:
 	constexpr FAny() noexcept {}
@@ -60,14 +60,14 @@ public:
     template<typename T>
     FORCEINLINE FAny(T Value)
     {
-        if constexpr (TAnd<TModels<CProvidesStaticEnum, T>, TOr<TIsEnumClass<T>, TIsEnum<T>>>::Value) {
+        if constexpr (TProvidesEnum<T>::Value) {
             TypeName = NAME_EnumProperty;
             auto Enum = FAnyEnum{ StaticEnum<T>(), static_cast<int64>(Value) };
             Content = new Holder(Enum);
         }
-        else if constexpr (TIsClass<T>::Value) {
+        else if constexpr (TProvidesStruct<T>::Value) {
             TypeName = NAME_StructProperty;
-            auto Struct = FAnyStruct{ TBaseStructure<T>().Get() };
+            auto Struct = FAnyStruct();
             if constexpr (TProvidesStaticStruct<T>::Value) {
                 Struct.Struct = T::StaticStruct();
             }
@@ -80,16 +80,21 @@ public:
             Content = new Holder(Struct);
         }
         else {
-            static_assert(TIsPODType<T>::value, "UNSUPPORT TYPE");
+            static_assert(std::is_pod<T>::value, "UNSUPPORT TYPE");
         }
     }
 
-    template<typename T, typename = TModels<CProvidesStaticClass, T>>
+    template<typename T>
     FORCEINLINE FAny(T* Value)
     {
-        TypeName = NAME_ObjectProperty;
-        auto Object = FAnyObject{ Value->GetClass(), Value };
-        Content = new Holder(Object);
+        if constexpr (TProvidesObject<T>::Value) {
+            TypeName = NAME_ObjectProperty;
+            auto Object = FAnyObject{ Value->GetClass(), Value };
+            Content = new Holder(Object);
+        }
+        else {
+            static_assert(std::is_pod<T>::value, "UNSUPPORT TYPE");
+        }
     }
 
     ~FAny() { Reset(); }
@@ -135,10 +140,44 @@ public:
         return TypeName;
     }
 
-    template<class ValueType>
-    inline ValueType Get() const
+    template<class T>
+    FORCEINLINE T Get() const
     {
-        return *(&(static_cast<Holder<ValueType>*>(Content)->Held));
+        if constexpr (TIsSame<UClass*, T>::Value) {
+            check(TypeName == NAME_Class);
+            auto Class = GetPtr<FAnyClass>();
+            return Class->Class.Get();
+        }
+        else if constexpr(TIsPointer<T>::Value && TProvidesObject<typename TRemovePointer<T>::Type>::Value)
+        { 
+            check(TypeName == NAME_ObjectProperty);
+            auto Object = GetPtr<FAnyObject>();
+            return reinterpret_cast<T>(Object->Object.Get());
+        }
+        else if constexpr (TNot<TIsPointer<T>>::Value && TProvidesEnum<T>::Value) {
+            check(TypeName == NAME_EnumProperty);
+            auto Enum = GetPtr<FAnyEnum>();
+            return static_cast<T>(Enum->Value);
+        }
+        else if constexpr (TNot<TIsPointer<T>>::Value && TProvidesStruct<T>::Value) {
+            check(TypeName == NAME_StructProperty);
+            auto Struct = GetPtr<FAnyStruct>();
+
+            T Result;
+            FMemoryReader Reader(Struct->Value, true);
+            Reader << Result;
+
+            return Result;
+        }
+        else {
+            static_assert(std::is_pod<T>::value, "UNSUPPORT TYPE");
+        }
+    }
+
+    template<class T>
+    FORCEINLINE T* GetPtr() const
+    {
+        return &static_cast<Holder<T>*>(Content)->Held;
     }
 
 public:
@@ -221,7 +260,8 @@ template<> struct TStructOpsTypeTraits<FAny> : public TStructOpsTypeTraitsBase2<
 
 
 #define IMPL_ANY(InTypeCpp, InTypeName) \
-template<> FORCEINLINE FAny::FAny(InTypeCpp Value) : TypeName(InTypeName), Content(new Holder<InTypeCpp>(Value)) {}
+template<> FORCEINLINE FAny::FAny(InTypeCpp Value) : TypeName(InTypeName), Content(new Holder<InTypeCpp>(Value)) {} \
+template<> FORCEINLINE InTypeCpp FAny::Get() const { return *(&(static_cast<Holder<InTypeCpp>*>(Content)->Held)); }
 
 
 #define IMPL_ANY_CUSTOM_STRUCT(InTypeName) \
@@ -241,8 +281,9 @@ template<> FORCEINLINE FAny::FAny(EForceInit)
 
 template<> FORCEINLINE FAny::FAny(UClass* Value)
     : TypeName(NAME_Class)
-    , Content(new Holder(Value))
+    , Content(new Holder(FAny::FAnyClass{ Value, Value }))
 {}
+
 
 IMPL_ANY(bool, NAME_BoolProperty)
 IMPL_ANY(BYTE, NAME_ByteProperty)
@@ -261,6 +302,7 @@ IMPL_ANY(FTransform, NAME_Transform)
 IMPL_ANY(FAny::FAnyStruct, NAME_StructProperty)
 IMPL_ANY(FAny::FAnyEnum, NAME_EnumProperty)
 IMPL_ANY(FAny::FAnyObject, NAME_ObjectProperty)
+IMPL_ANY(FAny::FAnyClass, NAME_Class)
 
 
 IMPL_ANY_CUSTOM_STRUCT(IntPoint)

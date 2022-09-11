@@ -4,6 +4,25 @@
 
 #include "CoreMinimal.h"
 #include "IPropertyTypeCustomization.h"
+#include "UnrealAny.h"
+
+
+class FAnyProperty : public TSharedFromThis<FAnyProperty>
+{
+public:
+	virtual ~FAnyProperty() {};
+
+	virtual void Make(class IDetailChildrenBuilder&, TArray<FAny*>) = 0;
+
+	FText GetSearchText() const;
+
+	void NotifyPostChange();
+
+	FText MultipleValuesText() const;
+protected:
+	TSharedPtr<class IPropertyHandle> Handle;
+};
+
 
 /** Customization for the message tag struct */
 class FUnrealAnyCustomization : public IPropertyTypeCustomization
@@ -18,8 +37,9 @@ public:
 	virtual void CustomizeChildren(TSharedRef<IPropertyHandle> InStructPropertyHandle, class IDetailChildrenBuilder& ChildBuilder, IPropertyTypeCustomizationUtils& StructCustomizationUtils) override;
 
 private:
-	void OnActionSetType(const FName Type);
+	TSharedRef<class SPinTypeSelector> CreatePinSelector(TArray<struct FAny*>, TSharedRef<IPropertyHandle>, TSharedRef<IPropertyUtilities>, bool);
 
-	TSharedPtr<IPropertyHandle> PropertyHandle;
+
+	TSharedPtr<FAnyProperty> AnyProperty;
 };
 

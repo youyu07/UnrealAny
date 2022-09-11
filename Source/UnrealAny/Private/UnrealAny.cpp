@@ -2,12 +2,63 @@
 
 #include "UnrealAny.h"
 
+
+static FArchive& operator<<(FArchive& Ar, FAny::FAnyStruct& Any)
+{
+	UObject* Object = Any.Struct.Get(true);
+	Ar << Object;
+
+	if (Ar.IsLoading()) {
+		Any.Struct = Cast<UScriptStruct>(Object);
+	}
+
+	Ar << Any.Value;
+	return Ar;
+}
+
+static FArchive& operator<<(FArchive& Ar, FAny::FAnyEnum& Any)
+{
+	UObject* Object = Any.Enum.Get(true);
+	Ar << Object;
+	if (Ar.IsLoading()) {
+		Any.Enum = Cast<UEnum>(Object);
+	}
+	Ar << Any.Value;
+	return Ar;
+}
+
+static FArchive& operator<<(FArchive& Ar, FAny::FAnyObject& Any)
+{
+	UObject* Object = Any.Class.Get(true);
+	Ar << Object;
+	if (Ar.IsLoading()) {
+		Any.Class = Cast<UClass>(Object);
+	}
+	Ar << Any.Object;
+	return Ar;
+}
+
+static FArchive& operator<<(FArchive& Ar, FAny::FAnyClass& Any)
+{
+	UObject* BaseClass = Any.BaseClass.Get(true);
+	UObject* Class = Any.Class.Get(true);
+	Ar << BaseClass;
+	Ar << Class;
+	if (Ar.IsLoading()) {
+		Any.BaseClass = Cast<UClass>(BaseClass);
+		Any.Class = Cast<UClass>(Class);
+	}
+	return Ar;
+}
+
 namespace Any
 {
 	template<typename T>
 	static void Loading(FAny& Any, FArchive& Ar)
 	{
-		T Value = T(); Ar << Value; Any = Value;
+		T Value = T(); 
+		Ar << Value; 
+		Any = Value;
 	}
 	template<typename T>
 	static void Saving(const FAny& Any, FArchive& Ar)
@@ -15,18 +66,22 @@ namespace Any
 		auto Value = Any.Get<T>();
 		Ar << Value;
 	}
+
+	template<> void Loading<UClass*>(FAny& Any, FArchive& Ar)
+	{
+		UClass* Value = nullptr;
+		Ar << Value;
+		Any = Value;
+	}
 }
 
 #define ADD_TYPE(Type, NameEnum)  \
 { \
-	FName TypeName = typeid(Type).name(); \
-	TypeMap.Add(TypeName, MakeTuple(NameEnum, Any::Loading<Type>, Any::Saving<Type>)); \
-	TypeNameMap.Add(NameEnum, TypeName); \
+	TypeMap.Add(NameEnum, MakeTuple(Any::Loading<Type>, Any::Saving<Type>)); \
 }
 
 
-static TMap<FName, TTuple<EName, TFunction<void(FAny&, FArchive&)>, TFunction<void(const FAny&, FArchive&)>>> TypeMap;
-static TMap<EName, FName> TypeNameMap;
+static TMap<EName, TTuple<TFunction<void(FAny&, FArchive&)>, TFunction<void(const FAny&, FArchive&)>>> TypeMap;
 static void InitializeTypeInfo()
 {
 	static bool IsInit = false;
@@ -43,6 +98,11 @@ static void InitializeTypeInfo()
 		ADD_TYPE(FVector, NAME_Vector)
 		ADD_TYPE(FRotator, NAME_Rotator)
 		ADD_TYPE(FTransform, NAME_Transform)
+
+		ADD_TYPE(FAny::FAnyStruct, NAME_StructProperty)
+		ADD_TYPE(FAny::FAnyEnum, NAME_EnumProperty)
+		ADD_TYPE(FAny::FAnyObject, NAME_ObjectProperty)
+		ADD_TYPE(FAny::FAnyClass, NAME_Class)
 	}
 }
 #undef ADD_TYPE
@@ -55,23 +115,14 @@ bool FAny::Serialize(FArchive& Ar)
 	Ar << TypeName;
 
 	if (Ar.IsSaving()) {
-		if (auto Ptr = TypeMap.Find(TypeInfo().name())) {
-			/*EName Type = Ptr->Get<0>();
-			Ar << Type;*/
-			Ptr->Get<2>()(*this, Ar);
+		if (auto Ptr = TypeMap.Find(TypeName)) {
+			Ptr->Get<1>()(*this, Ar);
 		}
-		/*else {
-			Ar << NAME_None;
-		}*/
 	}
 
-
 	if (Ar.IsLoading()) {
-		/*EName Type = NAME_None;
-		Ar << Type;*/
-		if (auto NamePtr = TypeNameMap.Find(TypeName)) {
-			auto Info = TypeMap[*NamePtr];
-			Info.Get<1>()(*this, Ar);
+		if (auto Ptr = TypeMap.Find(TypeName)) {
+			Ptr->Get<0>()(*this, Ar);
 		}
 	}
 
