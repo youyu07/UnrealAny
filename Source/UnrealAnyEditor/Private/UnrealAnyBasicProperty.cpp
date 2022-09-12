@@ -10,6 +10,7 @@ void FAnyBoolProperty::Make(IDetailChildrenBuilder& InChildBuilder, TArray<FAny*
 {
 	Anys = InAnys;
 	auto Widget = SNew(SCheckBox)
+		.IsEnabled(!IsReadOnly())
 		.IsChecked(this, &FAnyBoolProperty::OnGetCheckBoxState)
 		.OnCheckStateChanged(this, &FAnyBoolProperty::OnValueChanged);
 

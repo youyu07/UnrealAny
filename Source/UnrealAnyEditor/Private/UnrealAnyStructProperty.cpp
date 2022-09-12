@@ -5,9 +5,18 @@ template<>
 void FAnyStructProperty<FAny::FAnyStruct>::Make(IDetailChildrenBuilder& InChildBuilder, TArray<FAny*> InAnys)
 {
 	Anys = InAnys;
-	auto Struct = Anys[0]->GetPtr<FAny::FAnyStruct>();
-	TSharedPtr<FStructOnScope> Scope = MakeShareable(new FStructOnScope(Struct->Struct.Get(), Struct->Value.GetData()));
-	Setup(InChildBuilder, Scope.ToSharedRef());
+	TSet<UScriptStruct*> Structs;
+	for (auto& Any : Anys)
+	{
+		auto Struct = Any->Get<FAny::FAnyStruct>(); 
+		Structs.Add(Struct.Struct.Get());
+		Data.Insert(Struct.Value, Data.Num());
+	}
+
+	if (Anys.Num() == 1) {
+		TSharedPtr<FStructOnScope> Scope = MakeShareable(new FStructOnScope(*Structs.begin(), Data.GetData()));
+		Setup(InChildBuilder, Scope);
+	}
 }
 
 template<>

@@ -10,19 +10,23 @@
 void FAnyClassProperty::Make(IDetailChildrenBuilder& InChildBuilder, TArray<FAny*> InAnys)
 {
 	Anys = InAnys;
-	auto Class = Anys[0]->GetPtr<FAny::FAnyClass>();
 
-	auto Widget = SNew(SClassPropertyEntryBox)
-		.MetaClass(Class->BaseClass.Get())
-		.SelectedClass(this, &FAnyClassProperty::OnGetClass)
-		.OnSetClass(this, &FAnyClassProperty::OnClassChanged);
+	if (Anys.Num() == 1) {
+		auto Class = Anys[0]->GetPtr<FAny::FAnyClass>();
 
-	auto NameText = Class->BaseClass->GetDisplayNameText();
-	auto NameWidget = SNew(STextBlock).Text(NameText);
+		auto Widget = SNew(SClassPropertyEntryBox)
+			.IsEnabled(!IsReadOnly())
+			.MetaClass(Class->BaseClass.Get())
+			.SelectedClass(this, &FAnyClassProperty::OnGetClass)
+			.OnSetClass(this, &FAnyClassProperty::OnClassChanged);
 
-	InChildBuilder.AddCustomRow(GetSearchText())
-		.NameContent()[NameWidget]
-		.ValueContent()[Widget];
+		auto NameText = Class->BaseClass->GetDisplayNameText();
+		auto NameWidget = SNew(STextBlock).Text(NameText);
+
+		InChildBuilder.AddCustomRow(GetSearchText())
+			.NameContent()[NameWidget]
+			.ValueContent()[Widget];
+	}
 }
 
 const UClass* FAnyClassProperty::OnGetClass() const

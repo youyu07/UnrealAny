@@ -14,7 +14,7 @@ public:
 
 	virtual void Make(class IDetailChildrenBuilder& InChildBuilder, TArray<FAny*> InAnys) override;
 
-	int32 OnGetEnum() const;
+	TArray<int32> OnGetEnum() const;
 	void OnEnumChanged(int32, ESelectInfo::Type);
 
 protected:

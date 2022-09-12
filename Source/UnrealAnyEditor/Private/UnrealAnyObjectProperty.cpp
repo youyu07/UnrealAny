@@ -10,20 +10,22 @@
 void FAnyObjectProperty::Make(IDetailChildrenBuilder& InChildBuilder, TArray<FAny*> InAnys)
 {
 	Anys = InAnys;
-	auto Object = Anys[0]->GetPtr<FAny::FAnyObject>();
 
-	auto EnumWidget = SNew(SObjectPropertyEntryBox)
-		.AllowedClass(Object->Class.Get())
-		.ObjectPath(this, &FAnyObjectProperty::OnGetObjectPath)
-		.OnObjectChanged(this, &FAnyObjectProperty::OnObjectChanged);
+	if (Anys.Num() == 1) {
+		auto Object = Anys[0]->GetPtr<FAny::FAnyObject>();
+		auto EnumWidget = SNew(SObjectPropertyEntryBox)
+			.IsEnabled(!IsReadOnly())
+			.AllowedClass(Object->Class.Get())
+			.ObjectPath(this, &FAnyObjectProperty::OnGetObjectPath)
+			.OnObjectChanged(this, &FAnyObjectProperty::OnObjectChanged);
 
+		auto NameText = Object->Class->GetDisplayNameText();
+		auto NameWidget = SNew(STextBlock).Text(NameText);
 
-	auto NameText = Object->Class->GetDisplayNameText();
-	auto NameWidget = SNew(STextBlock).Text(NameText);
-
-	InChildBuilder.AddCustomRow(GetSearchText())
-		.NameContent()[NameWidget]
-		.ValueContent()[EnumWidget];
+		InChildBuilder.AddCustomRow(GetSearchText())
+			.NameContent()[NameWidget]
+			.ValueContent()[EnumWidget];
+	}
 }
 
 

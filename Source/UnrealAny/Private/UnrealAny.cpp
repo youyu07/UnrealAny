@@ -29,12 +29,14 @@ static FArchive& operator<<(FArchive& Ar, FAny::FAnyEnum& Any)
 
 static FArchive& operator<<(FArchive& Ar, FAny::FAnyObject& Any)
 {
-	UObject* Object = Any.Class.Get(true);
+	UObject* Class = Any.Class.Get(true);
+	UObject* Object = Any.Object.Get(true);
+	Ar << Class;
 	Ar << Object;
 	if (Ar.IsLoading()) {
-		Any.Class = Cast<UClass>(Object);
+		Any.Class = Cast<UClass>(Class);
+		Any.Object = Object;
 	}
-	Ar << Any.Object;
 	return Ar;
 }
 

@@ -10,6 +10,16 @@
 
 #define DEFINE_PINTYPE(Category, SubCategory, SubObject) FEdGraphPinType(Category, SubCategory, SubObject, EPinContainerType::None, false, FEdGraphTerminalType())
 
+
+#define CASE_ONGETPININFO(Type, AnyType, AnyObject, Name) \
+TSet<Type*> Array;\
+for (auto& Any : Anys) \
+{ \
+	Array.Add(Any->Get<AnyType>().AnyObject.Get()); \
+} \
+if (Array.Num() == 1) return DEFINE_PINTYPE(UEdGraphSchema_K2::PC_##Name, NAME_None, *Array.begin()); \
+break
+
 static FEdGraphPinType OnGetPinInfo(TArray<FAny*> Anys, bool bMultiType)
 {
 	if (!bMultiType) {
@@ -30,12 +40,17 @@ static FEdGraphPinType OnGetPinInfo(TArray<FAny*> Anys, bool bMultiType)
 		case NAME_Rotator: return DEFINE_PINTYPE(UEdGraphSchema_K2::PC_Struct, NAME_None, TBaseStructure<FRotator>::Get());
 		case NAME_Transform: return DEFINE_PINTYPE(UEdGraphSchema_K2::PC_Struct, NAME_None, TBaseStructure<FTransform>::Get());
 
-		case NAME_StructProperty: return DEFINE_PINTYPE(UEdGraphSchema_K2::PC_Struct, NAME_None, Anys[0]->Get<FAny::FAnyStruct>().Struct.Get());
-		case NAME_EnumProperty: return DEFINE_PINTYPE(UEdGraphSchema_K2::PC_Enum, NAME_None, Anys[0]->Get<FAny::FAnyEnum>().Enum.Get());
-		case NAME_ObjectProperty: return DEFINE_PINTYPE(UEdGraphSchema_K2::PC_Object, NAME_None, Anys[0]->Get<FAny::FAnyObject>().Class.Get());
+		case NAME_StructProperty: {
+			CASE_ONGETPININFO(UScriptStruct, FAny::FAnyStruct, Struct, Struct);
+		}
+		case NAME_EnumProperty: {
+			CASE_ONGETPININFO(UEnum, FAny::FAnyEnum, Enum, Enum);
+		}
+		case NAME_ObjectProperty: {
+			CASE_ONGETPININFO(UClass, FAny::FAnyObject, Class, Object);
+		}
 		case NAME_Class: {
-			auto Class = Anys[0]->Get<FAny::FAnyClass>().BaseClass.Get();
-			return DEFINE_PINTYPE(UEdGraphSchema_K2::PC_Class, NAME_None, Class);
+			CASE_ONGETPININFO(UClass, FAny::FAnyClass, BaseClass, Class);
 		}
 		}
 	}
@@ -145,16 +160,17 @@ static void PinInfoChanged(const FEdGraphPinType& PinType, TArray<FAny*> Anys, T
 }
 
 
-TSharedRef<SPinTypeSelector> FUnrealAnyCustomization::CreatePinSelector(TArray<FAny*> Anys, TSharedRef<IPropertyHandle> InHandle, TSharedRef<IPropertyUtilities> Utilities, bool bMultiType)
+TSharedRef<SPinTypeSelector> FUnrealAnyCustomization::CreatePinSelector(TSharedRef<IPropertyHandle> InHandle, TSharedRef<IPropertyUtilities> Utilities, bool bMultiType)
 {
 	auto Schema = GetDefault<UEdGraphSchema_K2>();
 	return SNew(SPinTypeSelector, FGetPinTypeTree::CreateUObject(Schema, &UEdGraphSchema_K2::GetVariableTypeTree))
+		.ReadOnly(!InHandle->IsEditable())
 		.TargetPinType_Static(OnGetPinInfo, Anys, bMultiType)
 		.OnPinTypeChanged_Static(PinInfoChanged, Anys, InHandle, Utilities)
 		.SelectorType(SPinTypeSelector::ESelectorType::Partial)
 		.Schema(Schema);
 }
 
-
-
 #undef LOCTEXT_NAMESPACE
+#undef DEFINE_PINTYPE
+#undef CASE_ONGETPININFO

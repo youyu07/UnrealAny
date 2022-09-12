@@ -34,6 +34,7 @@ public:
 	{
 		Anys = InAnys;
 		auto Widget = SNew(SNumericEntryBox<T>)
+			.IsEnabled(!IsReadOnly())
 			.AllowSpin(true)
 			.MinValue(TOptional<T>())
 			.MaxValue(TOptional<T>())
@@ -95,15 +96,13 @@ public:
 	{
 		Anys = InAnys;
 
-		bool ReadOnly = false;
-
 		auto Widget = SNew(SMultiLineEditableTextBox)
 			.Text(this, &FAnyTextProperty::OnGetValue)
 			.SelectAllTextWhenFocused(false)
 			.ClearKeyboardFocusOnCommit(false)
 			.OnTextCommitted(this, &FAnyTextProperty::OnValueChanged)
 			.SelectAllTextOnCommit(false)
-			.IsReadOnly(ReadOnly)
+			.IsReadOnly(IsReadOnly())
 			.AutoWrapText(true)
 			.ModiferKeyForNewLine(EModifierKey::Shift);
 

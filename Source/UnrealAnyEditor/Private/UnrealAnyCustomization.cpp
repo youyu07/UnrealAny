@@ -25,6 +25,13 @@ FText FAnyProperty::GetSearchText() const
 void FAnyProperty::NotifyPostChange()
 {
 	Handle->NotifyPostChange(EPropertyChangeType::ValueSet);
+
+	TArray<UPackage*> Packages;
+	Handle->GetOuterPackages(Packages);
+	for (auto& P : Packages)
+	{
+		P->SetDirtyFlag(true);
+	}
 }
 
 FText FAnyProperty::MultipleValuesText() const
@@ -33,22 +40,30 @@ FText FAnyProperty::MultipleValuesText() const
 }
 
 
+const bool FAnyProperty::IsReadOnly() const
+{
+	return !Handle->IsEditable();
+}
+
+
 TSharedRef<IPropertyTypeCustomization> FUnrealAnyCustomization::MakeInstance()
 {
 	return MakeShareable(new FUnrealAnyCustomization);
 }
 
-
-
 void FUnrealAnyCustomization::CustomizeHeader(TSharedRef<IPropertyHandle> InStructPropertyHandle, FDetailWidgetRow& HeaderRow, IPropertyTypeCustomizationUtils& StructCustomizationUtils)
 {
 	TSharedPtr<IPropertyUtilities> Utilities = StructCustomizationUtils.GetPropertyUtilities();
 
-	TArray<FAny*> Anys;
 	InStructPropertyHandle->EnumerateRawData([&](void* RawData, const int32 /*DataIndex*/, const int32 /*NumDatas*/) -> bool {
 		Anys.Add(reinterpret_cast<FAny*>(RawData));
 		return true;
 	});
+
+	for (auto& it : Anys)
+	{
+		Types.Add(it->Type());
+	}
 
 	InStructPropertyHandle->SetOnPropertyResetToDefault(FSimpleDelegate::CreateLambda([](TSharedRef<IPropertyHandle> Handle, const TArray<FAny*>& TempAnys, TSharedPtr<IPropertyUtilities> TempUtilities) {
 		Handle->NotifyPreChange();
@@ -63,16 +78,9 @@ void FUnrealAnyCustomization::CustomizeHeader(TSharedRef<IPropertyHandle> InStru
 		TempUtilities->ForceRefresh();
 	}, InStructPropertyHandle, Anys, Utilities));
 
-	TSet<EName> Types;
-	for (auto& it : Anys)
-	{
-		Types.Add(it->Type());
-	}
-
 	if (Anys.Num() > 0) {
-		
 		auto Schema = GetDefault<UEdGraphSchema_K2>();
-		auto TypeSelector = CreatePinSelector(Anys, InStructPropertyHandle, Utilities.ToSharedRef(), Types.Num() > 1);
+		auto TypeSelector = CreatePinSelector(InStructPropertyHandle, Utilities.ToSharedRef(), Types.Num() > 1);
 
 		HeaderRow.NameContent()[
 			InStructPropertyHandle->CreatePropertyNameWidget()
@@ -80,38 +88,6 @@ void FUnrealAnyCustomization::CustomizeHeader(TSharedRef<IPropertyHandle> InStru
 
 		HeaderRow.ValueContent()[TypeSelector];
 
-		if (Types.Num() == 1) {
-			auto Type = *Types.begin();
-
-			switch (Type)
-			{
-			case NAME_StructProperty:
-			{
-				InStructPropertyHandle->AddChildStructure(MakeShareable(new FStructOnScope(Anys[0]->Get<FAny::FAnyStruct>().Struct.Get())));
-				break;
-			}
-			case NAME_Vector:
-			{
-				InStructPropertyHandle->AddChildStructure(MakeShareable(new FStructOnScope(TBaseStructure<FVector>::Get())));
-				break;
-			}
-			case NAME_Rotator:
-			{
-				InStructPropertyHandle->AddChildStructure(MakeShareable(new FStructOnScope(TBaseStructure<FRotator>::Get())));
-				break;
-			}
-			case NAME_Transform:
-			{
-				InStructPropertyHandle->AddChildStructure(MakeShareable(new FStructOnScope(TBaseStructure<FTransform>::Get())));
-				break;
-			}
-			default:
-			{
-				InStructPropertyHandle->AddChildStructure(MakeShareable(new FStructOnScope()));
-				break;
-			}
-			}
-		}
 	}
 }
 
@@ -128,18 +104,6 @@ case TypeName: \
 
 void FUnrealAnyCustomization::CustomizeChildren(TSharedRef<IPropertyHandle> InStructPropertyHandle, IDetailChildrenBuilder& ChildBuilder, IPropertyTypeCustomizationUtils& StructCustomizationUtils)
 {
-	TArray<FAny*> Anys;
-	InStructPropertyHandle->EnumerateRawData([&](void* RawData, const int32 /*DataIndex*/, const int32 /*NumDatas*/) -> bool {
-		Anys.Add(reinterpret_cast<FAny*>(RawData));
-		return true;
-	});
-
-	TSet<EName> Types;
-	for (auto& it : Anys)
-	{
-		Types.Add(it->Type());
-	}
-
 	if (Types.Num() == 1) {
 		auto Type = *Types.begin();
 		switch (Type)
@@ -165,5 +129,5 @@ void FUnrealAnyCustomization::CustomizeChildren(TSharedRef<IPropertyHandle> InSt
 	}
 }
 
-
+#undef CREATE_PROPERTY
 #undef LOCTEXT_NAMESPACE

@@ -19,6 +19,8 @@ public:
 	void NotifyPostChange();
 
 	FText MultipleValuesText() const;
+
+	const bool IsReadOnly() const;
 protected:
 	TSharedPtr<class IPropertyHandle> Handle;
 };
@@ -37,9 +39,11 @@ public:
 	virtual void CustomizeChildren(TSharedRef<IPropertyHandle> InStructPropertyHandle, class IDetailChildrenBuilder& ChildBuilder, IPropertyTypeCustomizationUtils& StructCustomizationUtils) override;
 
 private:
-	TSharedRef<class SPinTypeSelector> CreatePinSelector(TArray<struct FAny*>, TSharedRef<IPropertyHandle>, TSharedRef<IPropertyUtilities>, bool);
+	TSharedRef<class SPinTypeSelector> CreatePinSelector(TSharedRef<IPropertyHandle>, TSharedRef<IPropertyUtilities>, bool);
 
 
 	TSharedPtr<FAnyProperty> AnyProperty;
+	TArray<FAny*> Anys;
+	TSet<EName> Types;
 };
 
