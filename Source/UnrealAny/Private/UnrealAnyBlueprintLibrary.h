@@ -16,13 +16,13 @@ class UUnrealAnyBlueprintLibrary : public UBlueprintFunctionLibrary
 	GENERATED_BODY()
 	
 public:
-	UFUNCTION(BlueprintPure, CustomThunk, meta = (CompactNodeTitle = "->", CustomStructureParam = "Value"))
-	static FAny CastToAny(const int32 Value);
+	UFUNCTION(BlueprintPure, CustomThunk, meta = (CompactNodeTitle = "ToAny", CustomStructureParam = "Value", Keywords = "Cast,To"))
+	static FAny ToAny(const int32 Value);
 
-	UFUNCTION(BlueprintPure, CustomThunk, meta = (CompactNodeTitle = "->", CustomStructureParam = "Value"))
-	static void AnyCast(const FAny& Any, int32& Value);
+	UFUNCTION(BlueprintPure, CustomThunk, meta = (CompactNodeTitle = "AnyTo", CustomStructureParam = "Value", Keywords = "Cast,To"))
+	static void AnyTo(const FAny& Any, int32& Value);
 
 private:
-	DECLARE_FUNCTION(execCastToAny);
-	DECLARE_FUNCTION(execAnyCast);
+	DECLARE_FUNCTION(execToAny);
+	DECLARE_FUNCTION(execAnyTo);
 };
