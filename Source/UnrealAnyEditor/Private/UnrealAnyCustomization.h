@@ -4,6 +4,27 @@
 
 #include "CoreMinimal.h"
 #include "IPropertyTypeCustomization.h"
+#include "UnrealAny.h"
+
+
+class FAnyProperty : public TSharedFromThis<FAnyProperty>
+{
+public:
+	virtual ~FAnyProperty() {};
+
+	virtual void Make(class IDetailChildrenBuilder&, TArray<FAny*>) = 0;
+
+	FText GetSearchText() const;
+
+	void NotifyPostChange();
+
+	FText MultipleValuesText() const;
+
+	const bool IsReadOnly() const;
+protected:
+	TSharedPtr<class IPropertyHandle> Handle;
+};
+
 
 /** Customization for the message tag struct */
 class FUnrealAnyCustomization : public IPropertyTypeCustomization
@@ -17,17 +38,12 @@ public:
 	/** Overridden to do nothing */
 	virtual void CustomizeChildren(TSharedRef<IPropertyHandle> InStructPropertyHandle, class IDetailChildrenBuilder& ChildBuilder, IPropertyTypeCustomizationUtils& StructCustomizationUtils) override;
 
-
 private:
-	FEdGraphPinType OnGetPinInfo(struct FAny* Any) const;
-	void PinInfoChanged(const FEdGraphPinType& PinType, struct FAny* Any);
-	void OnValueChanged(struct FAny* Any);
-	void InitializeStructValue(struct FAny* Any, struct FUnrealAnyEditorStructure* Struct);
+	TSharedRef<class SPinTypeSelector> CreatePinSelector(TSharedRef<IPropertyHandle>, TSharedRef<IPropertyUtilities>, bool);
 
-	TSharedPtr<FStructOnScope> StructOnScope;
-	TSharedPtr<IPropertyHandle> PropertyHandle;
-	TSharedPtr<IPropertyUtilities> PropertyUtilities;
 
-	struct FAny* GetAnyPtr() const;
+	TSharedPtr<FAnyProperty> AnyProperty;
+	TArray<FAny*> Anys;
+	TSet<EName> Types;
 };
 

@@ -36,11 +36,13 @@ public class UnrealAnyEditor : ModuleRules
 				"InputCore",
 				"UnrealEd",
 				"EditorStyle",
-				"PropertyEditor",
+                "EditorWidgets",
+                "PropertyEditor",
 				"KismetWidgets",
 				"BlueprintGraph",
 				"KismetCompiler",
 				"GraphEditor",
+				"Documentation",
 				"UnrealAny"
 			}
 			);
