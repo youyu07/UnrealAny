@@ -9,7 +9,7 @@ static FAny ToAny(FProperty* Property, uint8* Address)
 {
 	auto ValueProperty = CastField<PropertyType>(Property);
 	ValueType Value = ValueProperty->GetPropertyValue(Address);
-	return Value;
+	return MoveTemp(Value);
 }
 
 static FAny ByteToAny(FProperty* Property, uint8* Address)
@@ -142,26 +142,6 @@ static void AnyTo(const FAny& Any, FProperty* Property, uint8* Address)
 	CastField<PropertyType>(Property)->SetPropertyValue(Address, Any.Get<ValueType>());
 }
 
-static void AnyToFloat(const FAny& Any, FProperty* Property, uint8* Address)
-{
-	auto FloatProperty = CastField<FFloatProperty>(Property);
-	switch (Any.Type())
-	{
-	case NAME_FloatProperty: FloatProperty->SetPropertyValue(Address, Any.Get<float>()); break;
-	case NAME_DoubleProperty: FloatProperty->SetPropertyValue(Address, Any.Get<double>()); break;
-	}
-}
-
-static void AnyToDouble(const FAny& Any, FProperty* Property, uint8* Address)
-{
-	auto DoubleProperty = CastField<FDoubleProperty>(Property);
-	switch (Any.Type())
-	{
-	case NAME_FloatProperty: DoubleProperty->SetPropertyValue(Address, Any.Get<float>()); break;
-	case NAME_DoubleProperty: DoubleProperty->SetPropertyValue(Address, Any.Get<double>()); break;
-	}
-}
-
 static void AnyToStruct(const FAny& Any, FProperty* Property, uint8* Address)
 {
 	if (auto StructProperty = CastField<FStructProperty>(Property)) {
@@ -218,8 +198,8 @@ void Generic_AnyTo(const FAny& Any, FProperty* Property, uint8* Address, bool& b
 		FuncMap.Add(FBoolProperty::StaticClassCastFlags(), &AnyTo<FBoolProperty, bool>);
 		FuncMap.Add(FIntProperty::StaticClassCastFlags(), &AnyTo<FIntProperty, int32>);
 		FuncMap.Add(FInt64Property::StaticClassCastFlags(), &AnyTo<FInt64Property, int64>);
-		FuncMap.Add(FFloatProperty::StaticClassCastFlags(), &AnyToFloat);
-		FuncMap.Add(FDoubleProperty::StaticClassCastFlags(), &AnyToDouble);
+		FuncMap.Add(FFloatProperty::StaticClassCastFlags(), &AnyTo<FFloatProperty, float>);
+		FuncMap.Add(FDoubleProperty::StaticClassCastFlags(), &AnyTo<FDoubleProperty, double>);
 		FuncMap.Add(FNameProperty::StaticClassCastFlags(), &AnyTo<FNameProperty, FName>);
 		FuncMap.Add(FStrProperty::StaticClassCastFlags(), &AnyTo<FStrProperty, FString>);
 		FuncMap.Add(FTextProperty::StaticClassCastFlags(), &AnyTo<FTextProperty, FText>);
@@ -270,14 +250,6 @@ void Generic_AnyTo(const FAny& Any, FProperty* Property, uint8* Address, bool& b
 		case NAME_Class: {
 			auto Class = CastField<FClassProperty>(Property);
 			bOutSuccess = AnyType == NAME_Class && (Class->MetaClass == Any.Get<FAny::FAnyClass>().Class);
-			break;
-		}
-		case NAME_FloatProperty: {
-			bOutSuccess = AnyType == NAME_FloatProperty || AnyType == NAME_DoubleProperty;
-			break;
-		}
-		case NAME_DoubleProperty: {
-			bOutSuccess = AnyType == NAME_FloatProperty || AnyType == NAME_DoubleProperty;
 			break;
 		}
 		default: {

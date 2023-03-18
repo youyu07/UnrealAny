@@ -133,7 +133,69 @@ bool FAny::Serialize(FArchive& Ar)
 
 bool FAny::NetSerialize(FArchive& Ar, UPackageMap* Map, bool& bOutSuccess)
 {
-	
+	InitializeTypeInfo();
+	Ar << TypeName;
 
-	return false;
+	if (TypeName == NAME_StructProperty) {
+		if (Ar.IsLoading()) {
+			FAny::FAnyStruct StructValue;
+			UObject* Object = StructValue.Struct.Get(true);
+			Ar << Object;
+			StructValue.Struct = Cast<UScriptStruct>(Object);
+
+			Ar << StructValue.Value;
+			FNetBitReader Reader(Map, StructValue.Value.GetData(), StructValue.Value.Num() * 8);
+
+			TArray<uint8> Buffer;
+			Buffer.SetNumZeroed(StructValue.Struct->GetStructureSize());
+
+			FBinaryArchiveFormatter Formatter(Reader);
+			for (auto Property = StructValue.Struct->PropertyLink; Property; Property = Property->PropertyLinkNext)
+			{
+				FStructuredArchive Archive(Formatter);
+				FStructuredArchive::FSlot Slot = Archive.Open();
+				Property->SerializeItem(Slot, Buffer.GetData() + Property->GetOffset_ForInternal());
+				Archive.Close();
+			}
+
+			StructValue.Value = Buffer;
+			*this = StructValue;
+		}
+
+		if (Ar.IsSaving()) {
+			FAny::FAnyStruct StructValue = Get<FAny::FAnyStruct>();
+			UObject* Object = StructValue.Struct.Get(true);
+			Ar << Object;
+
+			FNetBitWriter Writer(Map, 1024 * 64);
+			FBinaryArchiveFormatter Formatter(Writer);
+			
+			for (auto Property = StructValue.Struct->PropertyLink; Property; Property = Property->PropertyLinkNext)
+			{
+				FStructuredArchive Archive(Formatter);
+				FStructuredArchive::FSlot Slot = Archive.Open();
+				Property->SerializeItem(Slot, StructValue.Value.GetData() + Property->GetOffset_ForInternal());
+				Archive.Close();
+			}
+
+			StructValue.Value = TArray<uint8>(Writer.GetData(), Writer.GetNumBytes());
+
+			Ar << StructValue.Value;
+		}
+	}
+	else {
+		if (Ar.IsSaving()) {
+			if (auto Ptr = TypeMap.Find(TypeName)) {
+				Ptr->Get<1>()(*this, Ar);
+			}
+		}
+
+		if (Ar.IsLoading()) {
+			if (auto Ptr = TypeMap.Find(TypeName)) {
+				Ptr->Get<0>()(*this, Ar);
+			}
+		}
+	}
+
+	return true;
 }
