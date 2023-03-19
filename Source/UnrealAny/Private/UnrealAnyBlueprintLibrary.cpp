@@ -252,10 +252,6 @@ void Generic_AnyTo(const FAny& Any, FProperty* Property, uint8* Address, bool& b
 			bOutSuccess = AnyType == NAME_Class && (Class->MetaClass == Any.Get<FAny::FAnyClass>().Class);
 			break;
 		}
-		default: {
-			bOutSuccess = AnyType == *Type;
-			break;
-		}
 		}
 	}
 	if (!bOutSuccess) return;

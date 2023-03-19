@@ -3,6 +3,123 @@
 #include "UnrealAny.h"
 
 
+#define MAX_BUFFER_SIZE 1024 * 64
+
+
+class FAnyReader : public FMemoryReader
+{
+public:
+	FAnyReader(const TArray<uint8>& InBytes) : FMemoryReader(InBytes)
+	{
+		SetIsLoading(true);
+		SetWantBinaryPropertySerialization(true);
+		ArIgnoreClassRef = false;
+		ArIgnoreArchetypeRef = false;
+	}
+
+	virtual FArchive& operator<<(UObject*& Value) override
+	{
+		FSoftObjectPtr Ptr(Value);
+		*this << Ptr;
+		Value = Ptr.LoadSynchronous();
+		return *this;
+	}
+
+	virtual FArchive& operator<<(struct FObjectPtr& Value) override
+	{
+		FSoftObjectPtr Ptr(Value);
+		*this << Ptr;
+		Value = Ptr.LoadSynchronous();
+		return *this;
+	}
+
+	virtual FArchive& operator<<(FLazyObjectPtr& Value) override
+	{
+		FArchive& Ar = *this;
+		FUniqueObjectGuid ID;
+		Ar << ID;
+
+		Value = ID;
+		return Ar;
+	}
+
+	virtual FArchive& operator<<(FSoftObjectPath& Value) override
+	{
+		Value.SerializePath(*this);
+		return *this;
+	}
+
+	virtual FArchive& operator<<(FSoftObjectPtr& Value) override
+	{
+		Value.ResetWeakPtr();
+		return *this << Value.GetUniqueID();
+	}
+
+	virtual FArchive& operator<<(FWeakObjectPtr& Value) override
+	{
+		return FArchiveUObject::SerializeWeakObjectPtr(*this, Value);
+	}
+};
+
+class FAnyWriter : public FMemoryWriter
+{
+public:
+	FAnyWriter(TArray<uint8>& InBytes) : FMemoryWriter(InBytes)
+	{
+		SetWantBinaryPropertySerialization(true);
+		ArIgnoreClassRef = false;
+		ArIgnoreArchetypeRef = false;
+	}
+
+	virtual FArchive& operator<<(UObject*& Value) override
+	{
+		auto Ptr = FSoftObjectPtr(Value);
+		return *this << Ptr;
+	}
+
+	virtual FArchive& operator<<(struct FObjectPtr& Value) override
+	{
+		auto Ptr = FSoftObjectPtr(Value);
+		return *this << Ptr;
+	}
+
+	virtual FArchive& operator<<(FLazyObjectPtr& Value) override
+	{
+		FUniqueObjectGuid ID = Value.GetUniqueID();
+		return *this << ID;
+	}
+
+	virtual FArchive& operator<<(FSoftObjectPath& Value) override
+	{
+		Value.SerializePath(*this);
+		return *this;
+	}
+
+	virtual FArchive& operator<<(FSoftObjectPtr& Value) override
+	{
+		return *this << Value.GetUniqueID();
+	}
+
+	virtual FArchive& operator<<(FWeakObjectPtr& Value) override
+	{
+		FArchiveUObject::SerializeWeakObjectPtr(*this, Value);
+		return *this;
+	}
+};
+
+
+//static void SerializeStruct(UScriptStruct* Struct, FArchive& Ar, TArray<uint8>& Buffer)
+//{
+//	FBinaryArchiveFormatter Formatter(Ar);
+//	for (auto Property = Struct->PropertyLink; Property; Property = Property->PropertyLinkNext)
+//	{
+//		FStructuredArchive Archive(Formatter);
+//		FStructuredArchive::FSlot Slot = Archive.Open();
+//		Property->SerializeItem(Slot, Buffer.GetData() + Property->GetOffset_ForInternal());
+//		Archive.Close();
+//	}
+//}
+
 static FArchive& operator<<(FArchive& Ar, FAny::FAnyStruct& Any)
 {
 	UObject* Object = Any.Struct.Get(true);
@@ -10,9 +127,26 @@ static FArchive& operator<<(FArchive& Ar, FAny::FAnyStruct& Any)
 
 	if (Ar.IsLoading()) {
 		Any.Struct = Cast<UScriptStruct>(Object);
+
+		TArray<uint8> Buffer;
+		Ar << Buffer;
+		FAnyReader Archive(Buffer);
+
+		Any.Value.SetNumZeroed(Any.Struct->GetStructureSize());
+		Any.Struct->SerializeItem(Archive, Any.Value.GetData(), nullptr);
 	}
 
-	Ar << Any.Value;
+	if (Ar.IsSaving()) {
+		TArray<uint8> Buffer;
+		Buffer.SetNumZeroed(MAX_BUFFER_SIZE);
+		FAnyWriter Archive(Buffer);
+		
+		Any.Struct->SerializeItem(Archive, Any.Value.GetData(), nullptr);
+
+		Buffer.SetNum(Archive.Tell());
+		Ar << Buffer;
+	}
+	
 	return Ar;
 }
 
@@ -167,7 +301,7 @@ bool FAny::NetSerialize(FArchive& Ar, UPackageMap* Map, bool& bOutSuccess)
 			UObject* Object = StructValue.Struct.Get(true);
 			Ar << Object;
 
-			FNetBitWriter Writer(Map, 1024 * 64);
+			FNetBitWriter Writer(Map, MAX_BUFFER_SIZE);
 			FBinaryArchiveFormatter Formatter(Writer);
 			
 			for (auto Property = StructValue.Struct->PropertyLink; Property; Property = Property->PropertyLinkNext)

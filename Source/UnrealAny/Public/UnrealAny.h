@@ -60,22 +60,22 @@ public:
     template<typename T>
     FORCEINLINE FAny(T Value)
     {
-        if constexpr (TProvidesEnum<T>::Value) {
+        if constexpr (Any::Private::TIsProvidesEnum<T>::Value) {
             TypeName = NAME_EnumProperty;
             auto Enum = FAnyEnum{ StaticEnum<T>(), static_cast<int64>(Value) };
             Content = new Holder(Enum);
         }
-        else if constexpr (TProvidesStruct<T>::Value) {
+        else if constexpr (Any::Private::TIsProvidesStruct<T>::Value) {
             TypeName = NAME_StructProperty;
             auto Struct = FAnyStruct();
-            if constexpr (TProvidesStaticStruct<T>::Value) {
+            if constexpr (Any::Private::TIsStaticStruct<T>::Value) {
                 Struct.Struct = T::StaticStruct();
             }
             else {
                 Struct.Struct = TBaseStructure<T>().Get();
             }
-            FMemoryWriter Writer(Struct.Value, true);
-            Writer << Value;
+            Struct.Value.SetNumZeroed(Struct.Struct->GetStructureSize());
+            Struct.Struct->CopyScriptStruct(Struct.Value.GetData(), &Value);
 
             Content = new Holder(Struct);
         }
@@ -87,7 +87,7 @@ public:
     template<typename T>
     FORCEINLINE FAny(T* Value)
     {
-        if constexpr (TProvidesObject<T>::Value) {
+        if constexpr (Any::Private::TIsProvidesObject<T>::Value) {
             TypeName = NAME_ObjectProperty;
             auto Object = FAnyObject{ Value->GetClass(), Value };
             Content = new Holder(Object);
@@ -119,14 +119,6 @@ public:
         return *this;
     }
 
-    /*template<class ValueType, class T = typename std::decay<ValueType>::type, typename std::enable_if<(!std::is_same<T, FAny>::value), int>::type = 0>
-    FAny& operator=(T&& Value)
-    {
-        FAny(std::move(Value)).Swap(*this);
-        return *this;
-    }*/
-
-
 	bool IsValid() {
 		return Content != nullptr;
 	}
@@ -148,24 +140,23 @@ public:
             auto Class = GetPtr<FAnyClass>();
             return Class->Class.Get();
         }
-        else if constexpr(TIsPointer<T>::Value && TProvidesObject<typename TRemovePointer<T>::Type>::Value)
+        else if constexpr(TIsPointer<T>::Value && Any::Private::TIsProvidesObject<typename TRemovePointer<T>::Type>::Value)
         { 
             check(TypeName == NAME_ObjectProperty);
             auto Object = GetPtr<FAnyObject>();
             return reinterpret_cast<T>(Object->Object.Get());
         }
-        else if constexpr (TNot<TIsPointer<T>>::Value && TProvidesEnum<T>::Value) {
+        else if constexpr (TNot<TIsPointer<T>>::Value && Any::Private::TIsProvidesEnum<T>::Value) {
             check(TypeName == NAME_EnumProperty);
             auto Enum = GetPtr<FAnyEnum>();
             return static_cast<T>(Enum->Value);
         }
-        else if constexpr (TNot<TIsPointer<T>>::Value && TProvidesStruct<T>::Value) {
+        else if constexpr (TNot<TIsPointer<T>>::Value && Any::Private::TIsProvidesStruct<T>::Value) {
             check(TypeName == NAME_StructProperty);
             auto Struct = GetPtr<FAnyStruct>();
-
+            
             T Result;
-            FMemoryReader Reader(Struct->Value, true);
-            Reader << Result;
+            Struct->Struct->CopyScriptStruct(&Result, Struct->Value.GetData());
 
             return Result;
         }
@@ -264,16 +255,6 @@ template<> FORCEINLINE FAny::FAny(InTypeCpp Value) : TypeName(InTypeName), Conte
 template<> FORCEINLINE InTypeCpp FAny::Get() const { return *(&(static_cast<Holder<InTypeCpp>*>(Content)->Held)); }
 
 
-#define IMPL_ANY_CUSTOM_STRUCT(InTypeName) \
-template<> FORCEINLINE FAny::FAny(F##InTypeName Value) : TypeName(NAME_StructProperty) \
-{ \
-    auto Struct = FAnyStruct{ FindObjectChecked<UScriptStruct>(ANY_PACKAGE, L#InTypeName) }; \
-    FMemoryWriter Writer(Struct.Value, true); \
-    Writer << Value; \
-    Content = new Holder(Struct); \
-}
-
-
 template<> FORCEINLINE FAny::FAny(EForceInit) 
     : TypeName(NAME_None)
     , Content(nullptr) 
@@ -303,10 +284,6 @@ IMPL_ANY(FAny::FAnyStruct, NAME_StructProperty)
 IMPL_ANY(FAny::FAnyEnum, NAME_EnumProperty)
 IMPL_ANY(FAny::FAnyObject, NAME_ObjectProperty)
 IMPL_ANY(FAny::FAnyClass, NAME_Class)
-
-
-IMPL_ANY_CUSTOM_STRUCT(IntPoint)
-IMPL_ANY_CUSTOM_STRUCT(IntVector)
 
 
 #undef IMPL_ANY

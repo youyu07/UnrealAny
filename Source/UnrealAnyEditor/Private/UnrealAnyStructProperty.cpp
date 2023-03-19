@@ -14,7 +14,9 @@ void FAnyStructProperty<FAny::FAnyStruct>::Make(IDetailChildrenBuilder& InChildB
 	}
 
 	if (Anys.Num() == 1) {
-		TSharedPtr<FStructOnScope> Scope = MakeShareable(new FStructOnScope(*Structs.begin(), Data.GetData()));
+		auto Struct = *Structs.begin();
+
+		TSharedPtr<FStructOnScope> Scope = MakeShareable(new FStructOnScope(Struct, Data.GetData()));
 		Setup(InChildBuilder, Scope);
 	}
 }
@@ -25,7 +27,8 @@ void FAnyStructProperty<FAny::FAnyStruct>::OnValueChanged()
 	ChildHandle->EnumerateRawData([&](void* RawData, const int32 Index, const int32 NumDatas) -> bool {
 		auto Src = Anys[Index]->GetPtr<FAny::FAnyStruct>();
 		Src->Struct->CopyScriptStruct(Src->Value.GetData(), RawData);
+
 		return true;
-		});
+	});
 	NotifyPostChange();
 }

@@ -5,47 +5,72 @@
 #include "CoreMinimal.h"
 
 
-struct CProvidesStaticEnum
+namespace Any::Private
 {
-    template<typename T>
-    auto Requires(const T&) -> decltype(StaticEnum<T>());
-};
+	struct CProvidesStaticEnum
+	{
+		template<typename T>
+		auto Requires(const T&) -> decltype(StaticEnum<T>());
+	};
 
-struct CProvidesStaticBaseStruct
-{
+	struct CProvidesStaticStruct
+	{
+		template<typename T>
+		auto Requires(const T&) -> decltype(StaticStruct<T>().Get());
+	};
+
+	struct CProvidesStaticBaseStruct
+	{
+		template<typename T>
+		auto Requires(const T&) -> decltype(TBaseStructure<T>().Get());
+	};
+
+	struct CProvidesStaticClass
+	{
+		template<typename T>
+		auto Requires(const T&) -> decltype(StaticClass<T>());
+	};
+
 	template<typename T>
-	auto Requires(const T&) -> decltype(TBaseStructure<T>().Get());
-};
+	struct TIsStaticStruct
+	{
+		enum { Value = TModels<CProvidesStaticStruct, T>::Value };
+	};
+
+	template<typename T>
+	struct TIsStaticBaseStruct
+	{
+		enum { Value = TModels<CProvidesStaticBaseStruct, T>::Value };
+	};
 
 
-template<typename T>
-struct TProvidesEnum
-{
-	static constexpr bool Value = TAnd<TModels<CProvidesStaticEnum, T>, TOr<TIsEnumClass<T>, TIsEnum<T>>>::Value;
-};
+	template<typename T>
+	struct TIsProvidesEnum
+	{
+		enum { Value = TAnd<TModels<CProvidesStaticEnum, T>, TOr<TIsEnumClass<T>, TIsEnum<T>>>::Value };
+	};
 
+	template<typename T>
+	struct TIsProvidesObject
+	{
+		enum { Value = TModels<CProvidesStaticClass, T>::Value };
+	};
 
-template<typename T>
-struct TProvidesObject
-{
-	static constexpr bool Value = TModels<CProvidesStaticClass, T>::Value;
-};
+	template<typename T>
+	struct TIsProvidesStruct
+	{
+		enum { Value = TOr<TModels<CProvidesStaticClass, T>, TModels<CProvidesStaticBaseStruct, T>>::Value };
+	};
 
+	template<typename T>
+	struct TGetType
+	{
+		typedef T Type;
+	};
 
-template<typename T>
-struct TProvidesStruct
-{
-	static constexpr bool Value = (TModels<CProvidesStaticStruct, T>::Value || TModels<CProvidesStaticBaseStruct, T>::Value);
-};
-
-template<typename T>
-struct TGetType
-{
-	typedef T Type;
-};
-
-template<typename T>
-struct TGetType<T*>
-{
-	typedef typename TGetType<T>::Type Type;
-};
+	template<typename T>
+	struct TGetType<T*>
+	{
+		typedef typename TGetType<T>::Type Type;
+	};
+}

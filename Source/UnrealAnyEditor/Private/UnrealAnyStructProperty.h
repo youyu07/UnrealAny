@@ -40,7 +40,11 @@ public:
 		Row->EditCondition(!IsReadOnly(), FOnBooleanValueChanged());
 
 		ChildHandle = Row->GetPropertyHandle();
-		ChildHandle->SetOnChildPropertyValueChanged(FSimpleDelegate::CreateSP(this, &FAnyStructProperty<T>::OnValueChanged));
+
+		auto Delegate = FSimpleDelegate::CreateSP(this, &FAnyStructProperty<T>::OnValueChanged);
+
+		ChildHandle->SetOnPropertyValueChanged(Delegate);
+		ChildHandle->SetOnChildPropertyValueChanged(Delegate);
 	}
 
 	void OnValueChanged()
@@ -58,3 +62,4 @@ protected:
 
 	TArray<uint8> Data;
 };
+
